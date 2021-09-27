@@ -7,7 +7,7 @@ require (
 	github.com/cockroachdb/apd v1.1.0
 	github.com/go-kit/log v0.1.0
 	github.com/gofrs/uuid v4.0.0+incompatible
-	github.com/jackc/pgconn v1.10.0
+	github.com/jackc/pgconn v1.10.1-0.20210927064621-07020eac8d0c
 	github.com/jackc/pgio v1.0.0
 	github.com/jackc/pgproto3/v2 v2.1.1
 	github.com/jackc/pgtype v1.8.1
@@ -19,3 +19,5 @@ require (
 	go.uber.org/zap v1.13.0
 	gopkg.in/inconshreveable/log15.v2 v2.0.0-20180818164646-67afb5ed74ec
 )
+
+replace github.com/jackc/pgconn => github.com/rueian/pgconn v1.10.1-0.20210927064621-07020eac8d0c
