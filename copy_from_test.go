@@ -326,6 +326,10 @@ func (cfs *clientFailSource) Err() error {
 	return cfs.err
 }
 
+func (cfs *clientFailSource) OIDs() []uint32 {
+	return nil
+}
+
 func TestConnCopyFromFailServerSideMidway(t *testing.T) {
 	t.Parallel()
 
@@ -402,6 +406,10 @@ func (fs *failSource) Err() error {
 	return nil
 }
 
+func (fs *failSource) OIDs() []uint32 {
+	return nil
+}
+
 func TestConnCopyFromFailServerSideMidwayAbortsWithoutWaiting(t *testing.T) {
 	t.Parallel()
 
@@ -474,6 +482,10 @@ func (fs *slowFailRaceSource) Values() ([]interface{}, error) {
 }
 
 func (fs *slowFailRaceSource) Err() error {
+	return nil
+}
+
+func (fs *slowFailRaceSource) OIDs() []uint32 {
 	return nil
 }
 
@@ -560,6 +572,10 @@ func (cfs *clientFinalErrSource) Values() ([]interface{}, error) {
 
 func (cfs *clientFinalErrSource) Err() error {
 	return fmt.Errorf("final error")
+}
+
+func (cfs *clientFinalErrSource) OIDs() []uint32 {
+	return nil
 }
 
 func TestConnCopyFromCopyFromSourceErrorEnd(t *testing.T) {

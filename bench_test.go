@@ -453,6 +453,10 @@ func (s *benchmarkWriteTableCopyFromSrc) Err() error {
 	return nil
 }
 
+func (s *benchmarkWriteTableCopyFromSrc) OIDs() []uint32 {
+	return nil
+}
+
 func newBenchmarkWriteTableCopyFromSrc(count int) pgx.CopyFromSource {
 	return &benchmarkWriteTableCopyFromSrc{
 		count: count,

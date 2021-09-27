@@ -5,10 +5,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"reflect"
 	"time"
 
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgio"
+	"github.com/jackc/pgtype"
 )
 
 // CopyFromRows returns a CopyFromSource interface over the provided rows slice
@@ -33,6 +34,26 @@ func (ctr *copyFromRows) Values() ([]interface{}, error) {
 
 func (ctr *copyFromRows) Err() error {
 	return nil
+}
+
+func (ctr *copyFromRows) OIDs() []uint32 {
+	if len(ctr.rows) == 0 {
+		return nil
+	}
+	ci := pgtype.NewConnInfo()
+	uids := make([]uint32, len(ctr.rows[0]))
+	for i, v := range ctr.rows[0] {
+		t := reflect.TypeOf(v)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+		typ, ok := ci.DataTypeForValue(reflect.New(t).Interface())
+		if !ok {
+			return nil
+		}
+		uids[i] = typ.OID
+	}
+	return uids
 }
 
 // CopyFromSlice returns a CopyFromSource interface over a dynamic func
@@ -65,6 +86,10 @@ func (cts *copyFromSlice) Err() error {
 	return cts.err
 }
 
+func (ctr *copyFromSlice) OIDs() []uint32 {
+	return nil
+}
+
 // CopyFromSource is the interface used by *Conn.CopyFrom as the source for copy data.
 type CopyFromSource interface {
 	// Next returns true if there is another row and makes the next row data
@@ -74,6 +99,10 @@ type CopyFromSource interface {
 
 	// Values returns the values for the current row.
 	Values() ([]interface{}, error)
+
+	// OIDs returns field OIDs to build value buffers.
+	// If this returns nil, then *Conn.CopyFrom will fire a prepared statement to get the field OIDs.
+	OIDs() []uint32
 
 	// Err returns any error that has been encountered by the CopyFromSource. If
 	// this is not nil *Conn.CopyFrom will abort the copy.
@@ -99,9 +128,16 @@ func (ct *copyFrom) run(ctx context.Context) (int64, error) {
 	}
 	quotedColumnNames := cbuf.String()
 
-	sd, err := ct.conn.Prepare(ctx, "", fmt.Sprintf("select %s from %s", quotedColumnNames, quotedTableName))
-	if err != nil {
-		return 0, err
+	oids := ct.rowSrc.OIDs()
+	if len(oids) == 0 {
+		sd, err := ct.conn.Prepare(ctx, "", fmt.Sprintf("select %s from %s", quotedColumnNames, quotedTableName))
+		if err != nil {
+			return 0, err
+		}
+		oids = make([]uint32, len(sd.Fields))
+		for i, f := range sd.Fields {
+			oids[i] = f.DataTypeOID
+		}
 	}
 
 	r, w := io.Pipe()
@@ -120,7 +156,7 @@ func (ct *copyFrom) run(ctx context.Context) (int64, error) {
 		moreRows := true
 		for moreRows {
 			var err error
-			moreRows, buf, err = ct.buildCopyBuf(buf, sd)
+			moreRows, buf, err = ct.buildCopyBuf(buf, oids)
 			if err != nil {
 				w.CloseWithError(err)
 				return
@@ -165,7 +201,7 @@ func (ct *copyFrom) run(ctx context.Context) (int64, error) {
 	return rowsAffected, err
 }
 
-func (ct *copyFrom) buildCopyBuf(buf []byte, sd *pgconn.StatementDescription) (bool, []byte, error) {
+func (ct *copyFrom) buildCopyBuf(buf []byte, oids []uint32) (bool, []byte, error) {
 
 	for ct.rowSrc.Next() {
 		values, err := ct.rowSrc.Values()
@@ -178,7 +214,7 @@ func (ct *copyFrom) buildCopyBuf(buf []byte, sd *pgconn.StatementDescription) (b
 
 		buf = pgio.AppendInt16(buf, int16(len(ct.columnNames)))
 		for i, val := range values {
-			buf, err = encodePreparedStatementArgument(ct.conn.connInfo, buf, sd.Fields[i].DataTypeOID, val)
+			buf, err = encodePreparedStatementArgument(ct.conn.connInfo, buf, oids[i], val)
 			if err != nil {
 				return false, nil, err
 			}
